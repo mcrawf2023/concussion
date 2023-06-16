@@ -1,0 +1,794 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(ggplot2)
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering visualization
+library(dendextend) # for comparing two dendrograms
+library(tidyr) # Load tidyr
+library(sparcl) # Sparse Clustering
+library(tidyverse)
+```
+
+```{r}
+data <- read.csv("athlete_data.csv")
+```
+
+```{r}
+summary(data)
+```
+
+
+```{r}
+head(data)
+tail(data)
+dim(data)
+```
+```{r}
+names(data)
+```
+```{r}
+sapply(data, class)
+```
+
+
+```{r}
+summary(as.factor(data$Concussion.History))
+```
+
+
+```{r}
+#convert -1s into null values and then impute them
+sum(data == -1) 
+data [data == -1] <- NA
+data <- data[ -c(73) ]
+head(data)
+sum(is.na(data))
+```
+
+```{r}
+#find columns with null values
+colnames(data)[colSums(is.na(data)) > 0]
+```
+
+
+```{r}
+#imputation
+data$Age..Years.[is.na(data$Age..Years.)]<-mean(data$Age..Years.,na.rm=TRUE)
+data$Learning.Disability[is.na(data$Learning.Disability)]<-mean(data$Learning.Disability,na.rm=TRUE)
+data$Anxiety.Diagnosis[is.na(data$Anxiety.Diagnosis)]<-mean(data$Anxiety.Diagnosis,na.rm=TRUE)
+data$Anxiety.Symptoms[is.na(data$Anxiety.Symptoms)]<-mean(data$Anxiety.Symptoms,na.rm=TRUE)
+data$Depression.Diagnosis[is.na(data$Depression.Diagnosis)]<-mean(data$Depression.Diagnosis,na.rm=TRUE)
+data$X..of.Prior.Depressive.Episodes[is.na(data$X..of.Prior.Depressive.Episodes)]<-mean(data$X..of.Prior.Depressive.Episodes,na.rm=TRUE)
+data$Prior.Depressive.Episode.s..Y.N[is.na(data$Prior.Depressive.Episode.s..Y.N)]<-mean(data$Prior.Depressive.Episode.s..Y.N,na.rm=TRUE)
+data$Aggregate.Medical.History[is.na(data$Aggregate.Medical.History)]<-mean(data$Aggregate.Medical.History,na.rm=TRUE)
+
+sum(is.na(data))
+```
+
+
+```{r}
+plot_dat <- data
+plot_dat$Concussion.History <- as.factor(plot_dat$Concussion.History) 
+g_1 <- ggplot(plot_dat, aes(x = PCS.Symptom.Severity..132., fill = Concussion.History)) +
+  geom_density(alpha = 0.5) +
+    theme_set(theme_bw(base_size = 11) ) + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(x = "Symptom Severity", title = "Relationship Between Symptom Severity and Concussion History", fill = "Diagnosis") + # Set labels
+  scale_fill_manual(values = c("1" = "red", "0" = "blue"), 
+                    labels = c("1" = "Concussion History", "0" = "No Concussion History"))
+g_1
+```
+
+```{r}
+plot_dat <- data
+plot_dat$Depression.Diagnosis <- as.factor(plot_dat$Depression.Diagnosis) 
+g_2 <- ggplot(plot_dat, aes(x = PCS.Symptom.Severity..132., fill = Depression.Diagnosis)) +
+  geom_density(alpha = 0.5) +
+    theme_set(theme_bw(base_size = 11) ) + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(x = "Symptom Severity", title = "Relationship Between Symptom Severity and Depression Diagnosis", fill = "Diagnosis") + # Set labels
+  scale_fill_manual(values = c("1" = "red", "0" = "blue"), 
+                    labels = c("1" = "Depression Diagnosis", "0" = "No Diagnosis"))
+g_2
+```
+
+```{r}
+plot_dat <- data
+plot_dat$Depression.Diagnosis <- as.factor(plot_dat$Depression.Diagnosis) 
+g_4 <- ggplot(plot_dat, aes(x = factor(Concussion.History), fill = Depression.Diagnosis)) +
+  geom_bar(alpha = 0.5, position = "dodge") +
+    theme_set(theme_bw(base_size = 11) ) + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(x = "Concussion History", title = "Relationship Between Concussion History and Depression Diagnosis", fill = "Diagnosis") + # Set labels
+  scale_fill_manual(values = c("1" = "red", "0" = "blue"), 
+                    labels = c("1" = "Depression Diagnosis", "0" = "No Diagnosis"))
+g_4
+```
+
+
+```{r}
+plot_dat <- data
+plot_dat$Anxiety.Diagnosis <- as.factor(plot_dat$Anxiety.Diagnosis) 
+g_3 <- ggplot(plot_dat, aes(x = PCS.Symptom.Severity..132., fill = Anxiety.Diagnosis)) +
+  geom_density(alpha = 0.5) +
+    theme_set(theme_bw(base_size = 11) ) + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(), 
+        panel.background = element_blank()) + 
+  labs(x = "Symptom Severity", title = "Relationship Between Symptom Severity and Anxiety Diagnosis", fill = "Diagnosis") + # Set labels
+  scale_fill_manual(values = c("1" = "red", "0" = "blue"), 
+                    labels = c("1" = "Anxiety Diagnosis", "0" = "No Diagnosis"))
+g_3
+```
+
+Hierarchical Clustering
+```{r}
+sdata <- scale(data[,-1])
+```
+
+```{r}
+summary(sdata)
+```
+
+```{r}
+# Calculate distances between points
+dist_mat <- dist(sdata, # Set dataset
+                 method = "euclidean") # Set distance measure to use
+```
+
+```{r}
+# Run hierarchical clustering
+hc <- hclust(dist_mat, # Set distance matrix to use 
+              method = "average" ) # Set linkage measure to use, for all the points in the cluster, what is the avg distance
+```
+
+```{r}
+plot(hc, # Set hierarchical clustering as plot object
+     cex = 0.6, # Set text size
+     hang = -1 ) # Set label position
+```
+
+```{r}
+# Create dendrogram
+dend <- as.dendrogram(hc)
+# order it the closest we can to the order of the observations:
+dend <- rotate(dend, 1:50)
+
+# Color the branches based on the clusters:
+dend <- color_branches(dend, k=10) 
+
+# We hang the dendrogram a bit:
+dend <- hang.dendrogram(dend,hang_height=0.1)
+# reduce the size of the labels:
+dend <- set(dend, "labels_cex", 0.55)
+# And plot:
+par(mar = c(3,3,3,7))
+plot(dend, 
+     main = "Clustered Concussion Data",
+     horiz =  TRUE,  nodePar = list(cex = .007))
+```
+
+```{r}
+clusters <- cutree(hc, # Specify object
+                   k = 5) # Specify number of clusters
+```
+
+```{r}
+#look @ every cluster and find avg of variables
+clustermeans <- as.data.frame(matrix(NA, nrow = 5, ncol = ncol(sdata)))
+for(i in 1:5){
+  if (sum(clusters == i) > 1){
+    clustermeans[i, ] <- colMeans(sdata[clusters == i,])
+  }
+  else{
+    clustermeans[i,] <- sdata[clusters == i,]
+  }
+  
+}
+names(clustermeans) <- names(data)[-1]
+```
+
+```{r}
+clustermeans
+summary(as.factor(clusters))
+```
+
+
+```{r}
+fviz_cluster(list(data = data, # Set data
+                  cluster = clusters)) # Set clusters
+```
+```{r}
+cbind(row.names(data), clusters)
+```
+```{r}
+colMeans(data[clusters == 1,])
+```
+```{r}
+colMeans(data[clusters == 2,])
+```
+
+```{r}
+colMeans(data[clusters == 4,])
+```
+```{r}
+colMeans(data[clusters == 5,])
+```
+
+```{r}
+remove outliers
+sdata <- sdata[-c(74, 79), ]
+```
+
+
+```{r}
+set.seed(12345) # Set seed for reproducibility
+fit_1 <- kmeans(x = sdata, # Set data as explantory variables 
+                centers = 5,  # Set number of clusters
+                nstart = 25, # Set number of starts
+                iter.max = 100 ) # Set maximum number of iterations to use
+```
+
+```{r}
+# Extract clusters
+clusters_1 <- fit_1$cluster
+# Extract centers
+centers_1 <- fit_1$centers
+# Check samples per cluster
+summary(as.factor(clusters_1))
+```
+```{r}
+# Create vector of clusters
+cluster <- c(1: 5)
+# Extract centers
+center_df <- data.frame(cluster, centers_1)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, Age..Years.:MFQ.Cut.off)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+```
+
+```{r}
+#makes case for dropping clusters 2 and 3 bc their values are so distinct from all of the others
+# Create vector of clusters
+cluster <- c(1: 5)
+# Extract centers
+center_df <- data.frame(cluster, centers_1)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, PCS.1:PCS.22)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+ggsave(g_heat_1, file = "PCSPlot.jpeg", width = 8, height = 12, dpi = 600)
+```
+
+```{r}
+#makes case for dropping clusters 2 and 3 bc their values are so distinct from all of the others
+# Create vector of clusters
+cluster <- c(1: 5)
+# Extract centers
+center_df <- data.frame(cluster, centers_1)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, MFQ.1:MFQ.33)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+ggsave(g_heat_1, file = "PCSPlot.jpeg", width = 8, height = 12, dpi = 600)
+```
+
+
+```{r}
+data2 <- data[!clusters %in% c(2,3,5),]
+```
+
+```{r}
+sdata2 <- scale(data2[,-1])
+#head(sdata2)
+```
+
+
+```{r}
+# Create silhouette plot summary
+fviz_nbclust(sdata2, # Set dataset
+             kmeans,# Set clustering method
+             method = "silhouette") # Set evaluation method
+```
+
+```{r}
+set.seed(12345) # Set seed for reproducibility
+fit_2 <- kmeans(x = sdata2, # Set data as explantory variables 
+                centers = 2,  # Set number of clusters
+                nstart = 25, # Set number of starts
+                iter.max = 100 ) # Set maximum number of iterations to use
+```
+
+
+```{r}
+# Extract clusters
+clusters_2 <- fit_2$cluster
+# Extract centers
+centers_2 <- fit_2$centers
+# Check samples per cluster
+summary(as.factor(clusters_2))
+```
+
+```{r}
+# Create vector of clusters
+cluster <- c(1: 2)
+# Extract centers
+center_df <- data.frame(cluster, centers_2)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, Age..Years.:MFQ.Cut.off)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+```
+
+```{r}
+# Create vector of clusters
+cluster <- c(1: 2)
+# Extract centers
+center_df <- data.frame(cluster, centers_2)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, PCS.1:PCS.22)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+```
+
+```{r}
+# Create vector of clusters
+cluster <- c(1: 2)
+# Extract centers
+center_df <- data.frame(cluster, centers_2)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, MFQ.1:MFQ.33)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+```
+
+```{r}
+#want our clusters to be balanced if possible (bad if cluster w much lower value)
+plot_clust_cardinality <- as.data.frame(clusters_2)
+
+names(plot_clust_cardinality) <- c("k_2") # Set names
+
+# Create bar plots
+g_2 <- ggplot(plot_clust_cardinality, aes( x = factor(k_2))) + # Set x as cluster values
+  geom_bar(stat = "count", fill = "steelblue") + # Use geom_bar with stat = "count" to count observations
+    labs(x = "Cluster Number", y="Points in Cluster", # Set labels
+         title = "Cluster Cardinality (k = 4)") +
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) 
+g_2
+```
+
+
+```{r}
+#plotting cluster magnitude
+#sum of distances of points to the center cluster
+k_4_mag <- cbind.data.frame(c(1:2), fit_2$withinss) # Extract within cluster sum of squares
+
+names(k_4_mag) <- c("cluster", "withinss") # Fix names for plot data
+
+
+# Create bar plot
+g_4 <- ggplot(k_4_mag, aes(x = cluster, y = withinss)) + # Set x as cluster, y as withinss
+  geom_bar(stat = "identity", fill = "steelblue") + # Use geom bar and stat = "identity" to plot values directly
+   labs(x = "Cluster Number", y="Total Point to Centroid Distance", # Set labels
+         title = "Cluster Magnitude (k = 2)") +
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) 
+
+g_4
+```
+
+```{r}
+k_4_dat <- cbind.data.frame(table(clusters_2), k_4_mag[,2]) # Join magnitude and cardinality
+
+names(k_4_dat) <- c("cluster", "cardinality", "magnitude") # Fix plot data names # card = how many samples there are and magnitude = how much error there is in each cluster
+
+# Create scatter plot
+g_6 <- ggplot(k_4_dat, aes(x = cardinality, y = magnitude, color = cluster)) + # Set aesthetics
+  geom_point(alpha = 0.8, size  = 4) +  # Set geom point for scatter
+ geom_smooth(aes(x = cardinality, y = magnitude), method = "lm",
+              se = FALSE, inherit.aes = FALSE, alpha = 0.5) + # Set trend  line
+  labs(x = "Cluster Cardinality", y="Total Point to Centroid Distance", # Set labels
+         title = "Cluster Magnitude vs Cardinality \n(k = 2)") +
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) 
+
+g_6
+```
+
+```{r}
+# Calculate distance between samples
+dis = dist(sdata2)^2
+# Set plotting parameters to view plot
+op <- par(mfrow= c(1,1), oma= c(0,0, 3, 0),
+          mgp= c(1.6,.8,0), mar= .1+c(4,2,2,2))
+# Create silhouette for k=4
+#how similar sample is to others in its cluster/how dissimilar it is to vals in otherclusters
+#want values to be as high as possible, if negative val more similar to vals in other clusters
+sil = silhouette (clusters_2 , # Set clustering
+                  dis, # Set distance 
+                  full = TRUE) # Generate silhouette for all samples
+# Generate silhouette plot
+plot(sil)
+```
+
+```{r}
+# Create silhouette plot summary
+fviz_nbclust(sdata2[clusters_2 ==1,], # Set dataset
+             kmeans,# Set clustering method
+             method = "silhouette") # Set evaluation method
+```
+
+Smaller group of data from sillouhette plot
+
+```{r}
+
+set.seed(12345) # Set seed for reproducibility
+fit_3 <- kmeans(x = sdata2[clusters_2 == 1,], # Set data as explantory variables 
+                centers = 2,  # Set number of clusters
+                nstart = 25, # Set number of starts
+                iter.max = 100 ) # Set maximum number of iterations to use
+```
+
+
+```{r}
+# Extract clusters
+clusters_3 <- fit_3$cluster
+# Extract centers
+centers_3 <- fit_3$centers
+# Checksamples per cluster
+summary(as.factor(clusters_3))
+```
+
+```{r}
+sdata3 <- sdata2[clusters_2 ==1,][clusters_3 != 2,]
+# Create silhouette plot summary
+fviz_nbclust(sdata3, # Set dataset
+             kmeans,# Set clustering method
+             method = "silhouette") # Set evaluation method
+```
+
+
+```{r}
+
+set.seed(12345) # Set seed for reproducibility
+fit_4 <- kmeans(x = sdata3, # Set data as explantory variables 
+                centers = 3,  # Set number of clusters
+                nstart = 25, # Set number of starts
+                iter.max = 100 ) # Set maximum number of iterations to use
+```
+
+
+```{r}
+# Extract clusters
+clusters_4 <- fit_4$cluster
+# Extract centers
+centers_4 <- fit_4$centers
+# Checksamples per cluster
+summary(as.factor(clusters_4))
+```
+
+Bigger group of data from silhouette plot
+
+```{r}
+sdata5 <- sdata2[clusters_2 ==2,]
+# Create silhouette plot summary
+fviz_nbclust(sdata5, # Set dataset
+             kmeans,# Set clustering method
+             method = "silhouette") # Set evaluation method
+```
+
+```{r}
+set.seed(12345) # Set seed for reproducibility
+fit_5 <- kmeans(x = sdata2[clusters_2 == 2,], # Set data as explantory variables 
+                centers = 4,  # Set number of clusters
+                nstart = 25, # Set number of starts
+                iter.max = 100 ) # Set maximum number of iterations to use
+```
+
+```{r}
+# Extract clusters
+clusters_5 <- fit_5$cluster
+# Extract centers
+centers_5 <- fit_5$centers
+# Checksamples per cluster
+summary(as.factor(clusters_5))
+```
+
+```{r}
+# Create vector of clusters
+cluster <- c(1: 4)
+# Extract centers
+center_df <- data.frame(cluster, centers_5)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, Age..Years.:MFQ.Cut.off)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+```
+
+```{r}
+# Create vector of clusters
+cluster <- c(1: 4)
+# Extract centers
+center_df <- data.frame(cluster, centers_5)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, PCS.1:PCS.22)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+```
+
+```{r}
+# Create vector of clusters
+cluster <- c(1: 4)
+# Extract centers
+center_df <- data.frame(cluster, centers_5)
+
+# Reshape the data
+center_reshape <- gather(center_df, features, values, MFQ.1:MFQ.33)
+# View first few rows
+head(center_reshape)
+
+# Create plot
+g_heat_1 <- ggplot(data = center_reshape, # Set dataset
+                   aes(x = features, y = cluster, fill = values)) + # Set aesthetics
+  scale_y_continuous(breaks = seq(1, 5, by = 1)) + # Set y axis breaks
+  geom_tile() + # Geom tile for heatmap
+  coord_equal() +  # Make scale the same for both axis
+  theme_set(theme_bw(base_size = 22) ) + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+                       mid = "white", # Choose mid color
+                       high = "red", # Choose high color
+                       midpoint =0, # Choose mid point
+                       space = "Lab", 
+                       na.value ="grey", # Choose NA value
+                       guide = "colourbar", # Set color bar
+                       aesthetics = "fill") + # Select aesthetics to apply
+  coord_flip() # Rotate plot to view names clearly
+# Generate plot
+g_heat_1
+```
+
+```{r}
+plot_clust_cardinality <- as.data.frame(clusters_5)
+
+names(plot_clust_cardinality) <- c("k_4") # Set names
+
+# Create bar plots
+g_6 <- ggplot(plot_clust_cardinality, aes( x = factor(k_4))) + # Set x as cluster values
+  geom_bar(stat = "count", fill = "steelblue") + # Use geom_bar with stat = "count" to count observations
+    labs(x = "Cluster Number", y="Points in Cluster", # Set labels
+         title = "Cluster Cardinality (k = 4)") +
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) 
+g_6
+```
+
+```{r}
+k_5_mag <- cbind.data.frame(c(1:4), fit_5$withinss) # Extract within cluster sum of squares
+
+names(k_5_mag) <- c("cluster", "withinss") # Fix names for plot data
+
+
+# Create bar plot
+g_7 <- ggplot(k_5_mag, aes(x = cluster, y = withinss)) + # Set x as cluster, y as withinss
+  geom_bar(stat = "identity", fill = "steelblue") + # Use geom bar and stat = "identity" to plot values directly
+   labs(x = "Cluster Number", y="Total Point to Centroid Distance", # Set labels
+         title = "Cluster Magnitude (k = 4)") +
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) 
+
+g_7
+```
+
+```{r}
+k_5_dat <- cbind.data.frame(table(clusters_5), k_5_mag[,2]) # Join magnitude and cardinality
+
+names(k_5_dat) <- c("cluster", "cardinality", "magnitude") # Fix plot data names # card = how many samples there are and magnitude = how much error there is in each cluster
+
+# Create scatter plot
+g_8 <- ggplot(k_5_dat, aes(x = cardinality, y = magnitude, color = cluster)) + # Set aesthetics
+  geom_point(alpha = 0.8, size  = 4) +  # Set geom point for scatter
+ geom_smooth(aes(x = cardinality, y = magnitude), method = "lm",
+              se = FALSE, inherit.aes = FALSE, alpha = 0.5) + # Set trend  line
+  labs(x = "Cluster Cardinality", y="Total Point to Centroid Distance", # Set labels
+         title = "Cluster Magnitude vs Cardinality \n(k = 4)") +
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) 
+
+g_8
+```
+```{r}
+
+```
+
